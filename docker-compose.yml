@@ -1,0 +1,134 @@
+services:
+  db:
+    container_name: postgres
+    image: postgres
+    restart: unless-stopped
+    environment:
+      POSTGERS_USER: postgres
+      POSTGERS_PASSWORD: password
+      PGDATA: /application/data/postgres
+      POSTGRES_HOST_AUTH_METHOD: "trust"
+    volumes:
+      - postgres:/application/data/postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - postgres
+
+  pg-admin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin4@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    volumes:
+      - pgadmin:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    networks:
+      - postgres
+
+  zipkin:
+    image: openzipkin/zipkin
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - application
+
+  rabbit-mq:
+    image: rabbitmq:3.12-management
+    container_name: rabbit-mq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - application
+
+  eureka-server:
+    image: youssef24hil/eureka-server:latest
+    container_name: eureka-server
+    ports:
+      - "8761:8761"
+    depends_on:
+      - zipkin
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - application
+
+  api-gateway:
+    image: youssef24hil/api-gateway:latest
+    container_name: api-gateway
+    ports:
+      - "8083:8083"
+    depends_on:
+      - zipkin
+      - eureka-server
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - application
+
+  customer:
+    container_name: customer
+    image: youssef24hil/customer:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - zipkin
+      - eureka-server
+      - db
+      - rabbit-mq
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - application
+      - postgres
+
+  fraud:
+    container_name: fraud
+    image: youssef24hil/fraud:latest
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    depends_on:
+      - zipkin
+      - eureka-server
+      - db
+      - rabbit-mq
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - application
+      - postgres
+
+  notification:
+    container_name: notification
+    image: youssef24hil/notification:latest
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    depends_on:
+      - zipkin
+      - eureka-server
+      - db
+      - rabbit-mq
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    networks:
+      - application
+      - postgres
+
+networks:
+  postgres:
+    driver: bridge
+  application:
+    driver: bridge
+
+volumes:
+  postgres:
+  pgadmin:
